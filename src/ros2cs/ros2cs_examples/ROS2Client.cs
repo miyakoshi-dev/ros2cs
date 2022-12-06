@@ -16,6 +16,7 @@
 using System;
 using System.Threading;
 using ROS2;
+using ROS2.Internal;
 using std_msgs;
 using sensor_msgs;
 using example_interfaces;
@@ -38,10 +39,12 @@ namespace Examples
 
       my_client.WaitForService(msg);
 
-      IntPtr ptr;
-      ptr = my_client.SendAndRecv(msg);
-      int sum = (int)ptr;
-      Console.WriteLine("Sum = " + sum);
+      example_interfaces.srv.AddTwoInts_Response respp = new example_interfaces.srv.AddTwoInts_Response();
+      MessageInternals msgInternals = respp as MessageInternals;
+
+      my_client.SendAndRecv(msg, msgInternals.Handle);
+      msgInternals.ReadNativeMessage();
+      Console.WriteLine("Sum = " + respp.Sum);
 
       Console.WriteLine("Client shutdown");
       Ros2cs.Shutdown();

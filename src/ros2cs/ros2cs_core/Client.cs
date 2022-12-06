@@ -104,15 +104,14 @@ namespace ROS2
 
     /// <summary> Sending and receiving service messages </summary>
     /// <see cref="IService.SendAndRecv"/>
-    public IntPtr SendAndRecv(T msg)
+    public void SendAndRecv(T msg, IntPtr respp)
     {
       int ret;
       int err_count = 0;
-      IntPtr respp = new IntPtr(0);
       if (!Ros2cs.Ok() || disposed)
       {
         logger.LogWarning("Cannot service as the class is already disposed or shutdown was called");
-        return(respp);
+        return;
       }
       MessageInternals msgInternals = msg as MessageInternals;
       msgInternals.WriteNativeMessage();
@@ -122,7 +121,7 @@ namespace ROS2
 
       /// receive responce
       while(true) {
-        ret = NativeRcl.rcl_take_response(ref serviceHandle, ref request_header, ref respp);
+        ret = NativeRcl.rcl_take_response(ref serviceHandle, ref request_header, respp);
         if ( (RCLReturnEnum)ret == RCLReturnEnum.RCL_RET_OK ) {
           break;
         } else if ( (RCLReturnEnum)ret == RCLReturnEnum.RCL_RET_CLIENT_TAKE_FAILED ) {
@@ -137,7 +136,6 @@ namespace ROS2
           break;
         }
       }
-      return(respp);
     }
   }
 }
