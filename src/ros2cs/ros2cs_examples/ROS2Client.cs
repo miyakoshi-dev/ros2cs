@@ -30,18 +30,19 @@ namespace Examples
       Console.WriteLine("Client start");
       Ros2cs.Init();
       INode node = Ros2cs.CreateNode("talker");
-      Client<example_interfaces.srv.AddTwoInts_Request> my_client = node.CreateClient<example_interfaces.srv.AddTwoInts_Request>("add_two_ints");
+      Client<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response> my_client = node.CreateClient<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response>("add_two_ints");
 
       example_interfaces.srv.AddTwoInts_Request msg = new example_interfaces.srv.AddTwoInts_Request();
       msg.A = 7;
       msg.B = 2;
 
-      my_client.WaitForService(msg);
+      while (!my_client.IsServiceAvailable())
+      {
+        Thread.Sleep(TimeSpan.FromSeconds(0.25));
+      }
 
-      IntPtr ptr;
-      ptr = my_client.SendAndRecv(msg);
-      int sum = (int)ptr;
-      Console.WriteLine("Sum = " + sum);
+      example_interfaces.srv.AddTwoInts_Response rsp = my_client.Call(msg);
+      Console.WriteLine("Sum = " + rsp.Sum);
 
       Console.WriteLine("Client shutdown");
       Ros2cs.Shutdown();

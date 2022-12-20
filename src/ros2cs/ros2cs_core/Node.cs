@@ -37,6 +37,17 @@ namespace ROS2
       }
     }
 
+    internal List<IClientBase> Clients
+    {
+      get
+      {
+        lock (mutex)
+        {
+          return clients.ToList();
+        }
+      }
+    }
+
     internal List<IServiceBase> Services
     {
       get
@@ -132,7 +143,7 @@ namespace ROS2
 
     /// <summary> Create a client for this node for a given topic, qos and message type </summary>
     /// <see cref="INode.CreateClient"/>
-    public Client<T> CreateClient<T>(string topic, QualityOfServiceProfile qos = null) where T : Message, new()
+    public Client<I, O> CreateClient<I, O>(string topic, QualityOfServiceProfile qos = null) where I : Message, new() where O : Message, new()
     {
       lock (mutex)
       {
@@ -142,7 +153,7 @@ namespace ROS2
           return null;
         }
 
-        Client<T> client = new Client<T>(topic, this, qos);
+        Client<I, O> client = new Client<I, O>(topic, this, qos);
         clients.Add(client);
         logger.LogInfo("Created Client for topic " + topic);
         return client;
@@ -157,6 +168,7 @@ namespace ROS2
         if (clients.Contains(client))
         {
           logger.LogInfo("Removing client for topic " + client.Topic);
+          client.Dispose();
           return clients.Remove(client);
         }
         return false;
@@ -191,6 +203,7 @@ namespace ROS2
         if (services.Contains(service))
         {
           logger.LogInfo("Removing service for topic " + service.Topic);
+          service.Dispose();
           return services.Remove(service);
         }
         return false;

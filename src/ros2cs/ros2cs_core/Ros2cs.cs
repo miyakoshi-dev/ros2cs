@@ -13,6 +13,8 @@
 // limitations under the License.
 
 using System;
+using System.Linq;
+using System.Diagnostics;
 using System.Collections.Generic;
 
 namespace ROS2
@@ -33,6 +35,8 @@ namespace ROS2
     private static rcl_allocator_t default_allocator;
     private static List<INode> nodes = new List<INode>(); // kept to shutdown everything in order
 
+    private static WaitSet WaitSet;
+
     /// <summary> Globally initialize ros2 (rcl) </summary>
     /// <description> Note that only a single context is used. </description>
     /// <remarks> If needed, support for multiple contexts can be added
@@ -49,6 +53,7 @@ namespace ROS2
         default_allocator = NativeRcl.rcutils_get_default_allocator();
         global_context = NativeRcl.rcl_get_zero_initialized_context();
         Utils.CheckReturnEnum(NativeRclInterface.rclcs_init(ref global_context, default_allocator));
+        WaitSet = new WaitSet(ref global_context);
         initialized = true;
       }
     }
@@ -208,48 +213,46 @@ namespace ROS2
 
         // TODO - This can be optimized so that we cache the list and invalidate only with changes
         var allSubscriptions = new List<ISubscriptionBase>();
-        foreach (INode node_interface in nodes)
-        {
-          Node node = node_interface as Node;
-          if (node == null)
-            continue; //Rare situation in which we are disposing
-
-          foreach(ISubscriptionBase subscription in node.Subscriptions)
-          {
-            if (subscription == null)
-              continue; //Rare situation in which we are disposing
-
-            allSubscriptions.Add(subscription);
-          }
-        }
-        // TODO - This can be optimized so that we cache the list and invalidate only with changes
+        var allClients = new List<IClientBase>();
         var allServices = new List<IServiceBase>();
         foreach (INode node_interface in nodes)
         {
           Node node = node_interface as Node;
           if (node == null)
             continue; //Rare situation in which we are disposing
-
-          foreach(IServiceBase service in node.Services)
-          {
-            if (service == null)
-              continue; //Rare situation in which we are disposing
-
-            allServices.Add(service);
-          }
+          
+          allSubscriptions.AddRange(node.Subscriptions.Where(s => s != null));
+          allClients.AddRange(node.Clients.Where(c => c != null));
+          allServices.AddRange(node.Services.Where(s => s != null));
         }
 
         // TODO - investigate performance impact
-        WaitSet.Wait(global_context, allSubscriptions, timeoutSec);
-
-        // Sequential processing
-        foreach (var subscription in allSubscriptions)
+        WaitSet.Resize(
+          (ulong)allSubscriptions.Count,
+          (ulong)allClients.Count,
+          (ulong)allServices.Count      
+        );
+        foreach(var subscription in allSubscriptions)
         {
-          subscription.TakeMessage();
+          AddResult result = WaitSet.TryAddSubscription(subscription, out ulong _);
+          Debug.Assert(result != AddResult.FULL, "no space for subscription in WaitSet");
         }
-        foreach (var service in allServices)
+        foreach(var client in allClients)
         {
-          service.TakeMessage();
+          AddResult result = WaitSet.TryAddClient(client, out ulong _);
+          Debug.Assert(result != AddResult.FULL, "no space for client in WaitSet");
+        }
+        foreach(var service in allServices)
+        {
+          AddResult result = WaitSet.TryAddService(service, out ulong _);
+          Debug.Assert(result != AddResult.FULL, "no space for Service in WaitSet");
+        }
+        if (WaitSet.Wait(TimeSpan.FromSeconds(timeoutSec)))
+        {
+          // Sequential processing
+          allSubscriptions.ForEach(subscription => subscription.TakeMessage());
+          allClients.ForEach(client => client.TakeMessage());
+          allServices.ForEach(service => service.TakeMessage());
         }
       }
     }
